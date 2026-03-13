@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f4f8;
+            border-left: 4px solid #0066cc;
+            border-radius: 3px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 Backend Connection Test</h1>
+        
+        <div class="test-section">
+            <h2>1. Check Server Status</h2>
+            <button onclick="checkHealth()">Test Connection</button>
+            <div id="healthResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Register New User</h2>
+            <label>Username:</label>
+            <input type="text" id="regUsername" placeholder="john_doe">
+            
+            <label>Email:</label>
+            <input type="email" id="regEmail" placeholder="john@example.com">
+            
+            <label>Password:</label>
+            <input type="password" id="regPassword" placeholder="password123">
+            
+            <button onclick="testRegister()">Register User</button>
+            <div id="registerResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. Login User</h2>
+            <label>Email or Username:</label>
+            <input type="text" id="loginEmail" placeholder="john@example.com">
+            
+            <label>Password:</label>
+            <input type="password" id="loginPassword" placeholder="password123">
+            
+            <button onclick="testLogin()">Login</button>
+            <div id="loginResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Instructions</h2>
+            <ol>
+                <li>Make sure your backend server is running: <code>node server-online.js</code></li>
+                <li>Initialize database if not done: <a href="http://localhost:3000/api/init-db" target="_blank">Click here</a></li>
+                <li>Test the connection above</li>
+                <li>Register a new user</li>
+                <li>Try logging in with the registered credentials</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+
+        async function checkHealth() {
+            const resultDiv = document.getElementById('healthResult');
+            resultDiv.innerHTML = 'Testing connection...';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/health`);
+                const data = await response.json();
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = '✅ Server is running!\n\n' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Connection failed!\n\nError: ' + error.message + '\n\nMake sure the backend server is running on port 3000.';
+            }
+        }
+
+        async function testRegister() {
+            const username = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const resultDiv = document.getElementById('registerResult');
+            
+            if (!username || !email || !password) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Please fill in all fields';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Registering user...';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = '✅ Registration successful!\n\n' + JSON.stringify(data, null, 2);
+                    
+                    // Auto-fill login form
+                    document.getElementById('loginEmail').value = email;
+                    document.getElementById('loginPassword').value = password;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '❌ Registration failed!\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Connection failed!\n\nError: ' + error.message;
+            }
+        }
+
+        async function testLogin() {
+            const emailOrUsername = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const resultDiv = document.getElementById('loginResult');
+            
+            if (!emailOrUsername || !password) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Please fill in all fields';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Logging in...';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ emailOrUsername, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = '✅ Login successful!\n\n' + JSON.stringify(data, null, 2);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '❌ Login failed!\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ Connection failed!\n\nError: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
