@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "NODE_ENV": "production",
+    "CORS_ORIGIN": "*"
+  },
+  "functions": {
+    "api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
+}

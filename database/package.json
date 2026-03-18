@@ -4,9 +4,11 @@
   "description": "Backend API for Freelancer login system",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "receiver": "node receiver-server.js"
+    "start": "node server-online.js",
+    "dev": "nodemon server-online.js",
+    "receiver": "node receiver-server.js",
+    "vercel-build": "echo 'Build complete'",
+    "vercel-dev": "vercel dev"
   },
   "keywords": [
     "express",
