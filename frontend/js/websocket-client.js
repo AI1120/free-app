@@ -80,7 +80,7 @@ let wsClient = null;
 
 function initializeWebSocket() {
     if (typeof CONFIG !== 'undefined' && CONFIG.WEBSOCKET_ENABLED) {
-        const wsUrl = CONFIG.WEBSOCKET_URL || 'ws://localhost:8080';
+        const wsUrl = CONFIG.WEBSOCKET_URL || 'ws://38.180.243.44:8080';
         wsClient = new LoginWebSocketClient(wsUrl);
         wsClient.connect();
     }
